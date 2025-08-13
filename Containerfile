@@ -20,4 +20,4 @@ VOLUME ["/logs"]
 WORKDIR /
 
 # Define the entrypoint or CMD based on the original image behavior
-ENTRYPOINT ["container-entrypoint.sh"]
+ENTRYPOINT ["/container-entrypoint.sh"]
