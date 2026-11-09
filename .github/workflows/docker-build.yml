@@ -1,33 +1,68 @@
 name: Build and Push Docker Image
 
 on:
+  schedule:
+    - cron: '0 0 * * 4'
   workflow_dispatch:
 
 jobs:
+  # One job per arch. arm64 runs on a native arm runner instead of under QEMU, so each job builds a
+  # single platform into an arch-suffixed tag; the merge job stitches them.
   build:
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [ "amd64", "arm64" ]
+        include:
+          - arch: amd64
+            runner: ubuntu-latest
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v4
+        with:
+          username: ${{ secrets.DOCKERHUB_USER }}
+          password: ${{ secrets.DOCKERHUB_PAT }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: ./Containerfile
+          platforms: linux/${{ matrix.arch }}
+          pull: true
+          push: true
+          provenance: false
+          tags: |
+            docker.io/fduarte42/logrotate:latest-${{ matrix.arch }}
+
+  # Combines :latest-amd64 and :latest-arm64 into the real multi-arch :latest.
+  merge:
+    needs: build
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
-      - name: Log in to GHCR
-        uses: docker/login-action@v3
+      - name: Login to Docker Hub
+        uses: docker/login-action@v4
         with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GHCR_PAT }}
+          username: ${{ secrets.DOCKERHUB_USER }}
+          password: ${{ secrets.DOCKERHUB_PAT }}
 
-      - name: Build and push Docker image
-        uses: docker/build-push-action@v5
-        with:
-          file: ./Containerfile
-          push: true
-          platforms: linux/amd64,linux/arm64
-          tags: ghcr.io/fduarte42/logrotate:latest
+      - name: Merge per-arch tags into multi-arch manifest
+        run: |
+          # sources are same-registry, so this only moves manifests, not image blobs
+          REG=docker.io/fduarte42/logrotate
+          docker buildx imagetools create -t "$REG:latest" \
+            "$REG:latest-amd64" "$REG:latest-arm64"
