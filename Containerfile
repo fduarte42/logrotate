@@ -7,7 +7,7 @@ ENV LOGS_DIRECTORIES="/logs"
 ENV LOGROTATE_INTERVAL=monthly
 ENV LOGROTATE_COMPRESSION=compress
 ENV LOGROTATE_STATUSFILE=/logs/logrotate.status
-ENV LOGROTATE_DATEFORMAT="-%Y%m%d%H%i%s"
+ENV LOGROTATE_DATEFORMAT="-%Y%m%d%H%M%S"
 
 # Install logrotate and bash, curl, or any required tools
 RUN apk add --no-cache logrotate bash curl
